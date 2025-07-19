@@ -1,0 +1,555 @@
+#include "Adafruit_GFX.h"     // Библиотека обработчика графики
+#include "Adafruit_ILI9341.h" // Программные драйвера для дисплеев ILI9341
+//#include "Adafruit_TFTLCD.h"
+#include <Keypad.h>
+#include <EEPROM.h>
+String raqam = "0123456789 ";
+int cm = 1; // uzgargan kursor
+int cur;//kursor
+int m;// menyu soni
+int q = -2; // Ungga va chapga strelka qadami
+int t = 0; // Tezlik
+int y = 0; // Yorliq uzunligi
+int o = 0; // Oraliq masofa uzunligi
+String d1 = "PNP"; // 1-Datchik
+String d2 = "PNP"; // 2-Datchik
+int aform = 1; // joriy aktiv forma
+int col = 0x07E0; //0xFFFF  rang
+long s = 0; // yopishtirilgan yorliq schetchigi
+int r; //0..9 raqamlar
+int k; // kupaytma
+int yd; // yorliq uchini chiqarish
+unsigned int j = 0; // xotiradagi pozitsiyasi
+word x = 0; // start stop
+struct mystruct {
+  int t = 100; //2
+  int y = 500; //2
+  int o = 120; //2
+  word d1 = 1; //2
+  word d2 = 1; //4
+  int yd = 0; //2
+  long s = 0; // schetchik
+  word c = 0; // eproom xotira 65000 marta yozgannini yozibboriladi
+};
+mystruct p = {}; //eprom xotira tipi
+#define TFT_CS 4              // Пин подключения вывода CS дисплея
+#define TFT_DC 5             // Пин подключения вывода D/C дисплея
+// Для управления очисткой экрана с помощью кнопки RESET на Arduino подключить вывод дисплея RESET через резистор к пину RESET на плате Arduino
+// Для Mega 2560 вывод дисплея RESET, если не подключен в пин RESET на Arduino, подключить в 3.3V (без резистора), либо в 5V (с резистором)
+//#define TFT_RST 8             // Пин подключения вывода RESET (Если подключен к питанию или кнопке, то эту строку закомментировать, а следующую раскомментировать)
+#define TFT_RST -1         // Если вывод дисплея RESET подключен к питанию или через кнопку RESET на Arduino
+// Uno Hardware SPI
+#define TFT_MOSI 6           // Пин подключения вывода дисплея SDI(MOSI)
+#define TFT_CLK 7            // Пин подключения вывода дисплея SCK
+//#define TFT_MISO 8           // Пин подключения вывода дисплея SDO(MISO)
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST);  // , TFT_MISO Создаем объект дисплея и сообщаем библиотеке распиновку для работы с графикой
+const byte ROWS = 4; //four rows
+const byte COLS = 4; //three columns
+char keys[ROWS][COLS] = {
+  // {'F','D','#','*'},
+  {'1', '2', '3', 'T'},
+  {'4', '5', '6', 'P'},
+  {'7', '8', '9', 'S'},
+  {'C', '0', 'U', 'E'}
+};
+byte rowPins[ROWS] = {A1,A2,A3,A4}; //connect to the row pinouts of the keypad
+byte colPins[COLS] = {11, 10,9,A5};
+char key = "";
+Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+
+void setup() {
+  Serial.begin(9600);
+  tft.begin();
+  //tft.setRotation(3);
+  tft.fillScreen(0);
+  if (EEPROM.read(0) != 7)
+  {
+    EEPROM.write(0, 7);  // birinchi proshivkada j ni boshlangich qiymati
+    j = 3;
+    EEPROM.put(1, j);
+    savepr();
+  }
+  EEPROM.get(1, j);
+  EEPROM.get(j, p);
+  t = p.t;
+  y = p.y;
+  o = p.o;
+  d1 = "PNP";
+  if (p.d1 == 1) {
+    d1 = "NPN";
+  }
+  d2 = "PNP";
+  if (p.d2 == 1) {
+    d2 = "NPN";
+  }
+  yd = p.yd;
+  s = p.s;
+  form1();
+  pinMode(3, INPUT_PULLUP);
+  attachInterrupt(1, savepr, RISING);
+}
+
+void loop()
+{
+  keyswich(keypad.getKey());
+  if (aform == 2) {
+    if (q != -2) {
+      chparam(cm);
+      q = -2;
+    }
+  }
+  else
+  {
+    if (Serial.available() > 0) schet();
+  }
+
+
+  if (cur != cm) {
+    if (aform == 1) {
+      drawcursor1();
+    }
+    else
+    {
+      drawcursor2();
+    }
+
+  }
+}
+
+//----------------
+void chparam(int m1)
+{
+  switch (m1) {
+    case 1:
+      tft.setTextColor(0);
+      tft.setCursor(135, 42);
+      tft.print(t);
+      tft.setTextColor(ILI9341_WHITE);
+      if ((t * k + q < 10000) && (t * k + q > -1))
+      {
+        t = t * k + q;
+      }
+      else {
+        t = 0;
+      }
+      tft.setCursor(135, 42);
+      tft.print(t);
+      break;
+    case 2:
+      tft.setTextColor(0);
+      tft.setCursor(135, 82);
+      tft.print(y);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.setCursor(135, 82);
+      if ((y * k + q < 10000) && (y * k + q > -1))
+      {
+        y = y * k + q;
+      }
+      else {
+        y = 0;
+      }
+      tft.print(y);
+      break;
+    case 3:
+      tft.setTextColor(0);
+      tft.setCursor(135, 122);
+      tft.print(o);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.setCursor(135, 122);
+      if ((o * k + q < 10000) && (o * k + q > -1))
+      {
+        o = o * k + q;
+      }
+      else {
+        o = 0;
+      }
+      tft.print(o); break;
+    case 4:
+      tft.setTextColor(0);
+      tft.setCursor(135, 162);
+      tft.print(d1);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.setCursor(135, 162);
+      if (q == 1) {
+        d1 = "NPN";
+      }
+      if (q == -1) {
+        d1 = "PNP";
+      }
+      tft.print(d1);  break;
+    case 5:
+      tft.setTextColor(0);
+      tft.setCursor(135, 202);
+      tft.print(d2);
+
+      tft.setTextColor(ILI9341_WHITE);
+      tft.setCursor(135, 202);
+      if (q == 1) {
+        d2 = "NPN";
+      }
+      if (q == -1) {
+        d2 = "PNP";
+      }
+      tft.print(d2);  break;
+
+    case 6:
+      tft.setTextColor(0);
+      tft.setCursor(135, 242);
+      tft.print(yd);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.setCursor(135, 242);
+      if ((yd * k + q < 9999) && (yd * k + q > -1))
+      {
+        yd = yd * k + q;
+      }
+      else {
+        yd = 0;
+      }
+      tft.print(yd); break;
+  }
+}
+//---------------------------
+void keyswich(char key)
+{
+
+  if (aform == 2) {
+    r = raqam.indexOf(key);
+    if ((r >= 0) && (r < 11)) {
+      key = 'N';
+    }
+  }
+  switch (key) {
+    case 'T':
+      cm = cm - 1;
+      if (cm < 1) {
+        cm = 1;
+      };
+      break;
+    case 'P':
+      cm = cm + 1;
+      if (cm > m) {
+        cm = m;
+      };
+      break;
+    case 'U':
+      k = 1;
+      q = 1;
+      break;
+    case 'C':
+      k = 1;
+      q = -1;
+      break;
+    case 'E':
+      if (aform == 1) {
+        ekeyform1();
+      }
+      else
+      {
+        ekeyform2();
+      }
+      break;
+    case 'S':
+      if (aform == 2) {
+        form1();
+      }
+
+      break;
+    case 'N':
+      k = 10;
+      q = r;
+      break;
+  }
+
+}
+//--------------------------------------
+void ekeyform1()
+{
+  if (cur == 1) {  //start stop knopka
+
+    Serial.print('t');
+    Serial.println(t);
+    //  Serial.print('#');
+    Serial.print('y');
+    Serial.println(y);
+    //   Serial.print('#');
+    Serial.print('o');
+    Serial.println(o);
+    //  Serial.print('#');
+    Serial.print('i');  //d1 uzgaruvchi
+    if (d1 == "NPN") {
+      Serial.println(1);
+    } else {
+      Serial.println(0);
+    };
+    //   Serial.print('#');
+    Serial.print('u');  //d2 uzgaruvchi
+    if (d2 == "NPN") {
+      Serial.println(1);
+    } else {
+      Serial.println(0);
+    };
+    //  Serial.print('#');
+    Serial.print('z');  // yd uzgaruvchi
+    Serial.println(yd);
+    //  Serial.print('#');
+    Serial.print('s');
+    Serial.println(s);
+    //   Serial.print('#');
+    Serial.print('x');// start stop
+    if (x == 0) {
+      x = 1;
+      tft.setTextColor(0x1515F);
+      tft.setCursor(60, 120);
+      tft.print("START");
+      tft.setTextColor(ILI9341_WHITE); tft.setCursor(60, 120);
+      tft.print("STOP");
+    } else {
+      tft.setTextColor(0x1515F); tft.setCursor(60, 120);
+      tft.print("STOP");
+      tft.setTextColor(ILI9341_WHITE); tft.setCursor(60, 120);
+      tft.print("START");
+      x = 0; savepr();
+    }
+    Serial.println(x);
+    //    Serial.print('#');
+
+  };
+  if (cur == 2) {
+    tft.setTextColor(0);
+    tft.setCursor(15, 55);
+    tft.print(s);
+    s = 0;
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(15, 55);
+    tft.print(s);
+    savepr();
+  };
+  if (cur == 3) {
+    if (x == 1) {
+      x = 0;
+      Serial.print('x');
+      Serial.println(x);
+      tft.setTextColor(0x1515F); tft.setCursor(60, 120);
+      tft.print("STOP");
+      tft.setTextColor(ILI9341_WHITE); tft.setCursor(60, 120);
+      tft.print("START");
+    }
+    savepr();
+    form2();
+    
+  };
+}
+void ekeyform2()
+{
+  if (cur == 1) {
+
+  };
+  if (cur == 2) {
+
+  };
+  if (cur == 7) {
+    savepr();
+    form1();
+  };
+
+}
+
+void drawcursor1() {
+  col = 0x07E0;
+label1:
+  switch (cur) {
+    case 1:
+      tft.drawRect(40, 110, 150, 50, col);
+      break;
+    case 2:
+      tft.drawRect(30, 170, 180, 50, col);
+      break;
+    case 3:
+      tft.drawRect(30, 250, 180, 50, col);
+
+      break;
+  }
+  if  (col != 0xF800) {
+    col = 0xF800;
+    cur = cm; goto label1;
+  }
+}
+
+void drawcursor2() {
+  col = 0x07E0;
+label2:
+  switch (cur) {
+    case 1:
+      tft.drawRect(130, 35, 100, 35, col);
+      break;
+    case 2:
+      tft.drawRect(130, 75, 100, 35, col);
+      break;
+    case 3:
+      tft.drawRect(130, 115, 100, 35, col);
+
+      break;
+    case 4:
+      tft.drawRect(130, 155, 100, 35, col);
+
+      break;
+    case 5:
+      tft.drawRect(130, 195, 100, 35, col);
+
+      break;
+    case 6:
+      tft.drawRect(130, 235, 100, 35, col);
+
+      break;
+
+    case 7:
+      tft.drawRect(50, 282, 140, 37, col);
+
+      break;
+
+  }
+  if  (col != 0xF800) {
+    col = 0xF800;
+    cur = cm; goto label2;
+  }
+
+}
+
+//----------------
+void form1() {
+
+  cur = 0;
+  cm = 1;
+  m = 3;
+  tft.fillScreen(0);
+  tft.setTextColor(ILI9341_WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(5, 10);
+  tft.print("ETIKETKA SONI");
+  tft.drawRect(10, 40, 220, 60, 0x07E0);
+  //tft.setTextSize(4);
+  tft.setCursor(15, 55);
+  tft.print(s);
+  tft.fillRect(40, 110, 150, 50, 0x1515F);
+  tft.setCursor(60, 120);
+  tft.print("START");
+
+  tft.fillRect(30, 170, 180, 50, 0x1515F);
+  tft.setCursor(35, 180);
+  tft.print("NOLLASH");
+
+  tft.fillRect(30, 250, 180, 50, 0x1515F);
+  tft.setCursor(35, 260);
+  tft.print("SOZLASH");
+  aform = 1;
+}
+//----------------
+void form2() {
+  EEPROM.get(j, p);
+  t = p.t;
+  y = p.y;
+  o = p.o;
+  d1 = "PNP";
+  if (p.d1 == 1) {
+    d1 = "NPN";
+  }
+  d2 = "PNP";
+  if (p.d2 == 1) {
+    d2 = "NPN";
+  }
+  yd = p.yd;
+  s = p.s;
+  //Serial.print(p.c);  nimga kerak eslolmadim!
+  cur = 0;
+  cm = 1;
+  m = 7;
+  tft.fillScreen(0);
+  tft.setTextColor(ILI9341_WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(30, 3);
+  tft.print("SOZLASHLAR");
+  tft.setCursor(15, 42);
+  tft.print("Tezlik");
+  tft.drawRect(130, 35, 100, 35, 0x07E0);
+  tft.setCursor(135, 42);
+  tft.print(t);
+  tft.setCursor(15, 82);
+  tft.print("Yorliq");
+  tft.drawRect(130, 75, 100, 35, 0x07E0);
+  tft.setCursor(135, 82);
+  tft.print(y);
+
+  tft.setCursor(15, 122);
+  tft.print("Oraliq");
+  tft.drawRect(130, 115, 100, 35, 0x07E0);
+  tft.setCursor(135, 122);
+  tft.print(o);
+
+
+  tft.setCursor(15, 162);
+  tft.print("Dat. 1");
+  tft.drawRect(130, 155, 100, 35, 0x07E0);
+  tft.setCursor(135, 162);
+  tft.print(d1);
+
+  tft.setCursor(15, 202);
+  tft.print("Dat. 2");
+  tft.drawRect(130, 195, 100, 35, 0x07E0);
+  tft.setCursor(135, 202);
+  tft.print(d2);
+
+  tft.setCursor(15, 242);
+  tft.print("Yor.ch");
+  tft.drawRect(130, 235, 100, 35, 0x07E0);
+  tft.setCursor(135, 242);
+  tft.print(yd);
+
+
+  tft.fillRect(50, 282, 140, 37, 0x1515F);
+  tft.setCursor(55, 290);
+  tft.print("SAQLASH");
+  aform = 2;
+
+}
+//------
+void savepr()
+{
+  if (p.c > 64000) {
+    if ((j + sizeof(p)) <= EEPROM.length()) {
+      j += sizeof(p);
+    }
+    else
+      j = 3;
+    p.c = 0;
+  }
+  EEPROM.put(1, j);// pozitsiya 1 xotiraga yacheykasiga yozib yuramiz
+  p.t = t;
+  p.y = y;
+  p.o = o;
+  p.d1 = 0;
+  if (d1 == "NPN") {
+    p.d1 = 1;
+  }
+  p.d2 = 0;
+  if (d2 == "NPN") {
+    p.d2 = 1;
+  }
+  p.yd = yd;
+  p.s = s;
+  p.c++;
+  EEPROM.put(j, p);
+}
+//-------------
+void schet()
+{
+  tft.setTextColor(0);
+  tft.setCursor(15, 55);
+  tft.print(s);
+  s = 0;
+  while (Serial.available() > 0) {         // ПОКА есть что то на вход
+    s = s * 10 + Serial.read() - 48; // забиваем строку принятыми данными
+  }
+  tft.setTextColor(ILI9341_WHITE);
+  tft.setCursor(15, 55);
+  tft.print(s);
+}
