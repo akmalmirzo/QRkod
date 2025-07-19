@@ -1,0 +1,2 @@
+# QRkod
+QRkod applikator
